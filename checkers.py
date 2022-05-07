@@ -20,10 +20,12 @@ PIECE_COLOR_WHITE = (227, 188, 79)
 PIECE_COLOR_DARK = (89, 128, 80)
 KING_COLOR = (66, 194, 155)
 MOVE_COLOR = (77, 189, 85)
-
+START_COLOR = PIECE_COLOR_DARK
 ROWS = 8
 COLS = 8
-START_BOARD = "1w1w1w1w/w1w1w1w1/1w1w1w1w/8/8/b1b1b1b1/1b1b1b1b/b1b1b1b1"
+#START_BOARD = "1w1w1w1w/w1w1w1w1/1w1w1w1w/8/8/b1b1b1b1/1b1b1b1b/b1b1b1b1"
+#START_BOARD = "1w1w1w1w/w1w1w1w1/8/8/8/8/1b1b1b1b/b1b1b1b1"
+START_BOARD = "5w2/b3w1w1/7w/2w5/7b/4b3/1W5w/4b1b1"
 
 
 class GameController:
@@ -32,18 +34,40 @@ class GameController:
         self.selected_troop = None
         self.board = Board(screen)
         self.player_on_turn = startColor
+        self.possible_moves = {}
+        self.selectPhase = True
 
     def select_troop(self, troop):
         if troop == '0':
+            self.selectPhase = True
+            self.possible_moves = {}
             return
-        if troop
 
-        if not self.selected_troop or troop.color == self.player_on_turn:
+        if troop.color == self.player_on_turn:
             self.selected_troop = troop
-            self.visualize_move(self.board.get_moves(troop))
+            self.possible_moves = self.board.get_moves(troop)
+            self.selectPhase = False
+            return
 
-    def select_position(self, idx):
-        pass
+        self.selectPhase = False
+        self.possible_moves = {}
+
+    def select_target_pos(self, idx, delete_troops):
+        if delete_troops:
+            if self.selected_troop.color == PIECE_COLOR_WHITE:
+                self.board.blackNum -= len(delete_troops)
+            else:
+                self.board.whiteNum -= len(delete_troops)
+
+        self.board.make_move(idx, self.selected_troop)
+        for troop in delete_troops:
+            self.board.board[troop.x][troop.y] = '0'
+        self.possible_moves = {}
+        self.selectPhase = True
+
+    def get_winner(self):
+        if self.board.whiteNum == 0:
+            pass
 
     def get_troop_valid_moves(self, troop):
         pass
@@ -58,6 +82,7 @@ class GameController:
         self.board.make_move(idx, self.selected_troop)
 
     def change_player_on_turn(self):
+        print("white:", self.board.whiteNum, "black", self.board.blackNum)
         if self.player_on_turn == PIECE_COLOR_WHITE:
             self.player_on_turn = PIECE_COLOR_DARK
         else:
@@ -86,11 +111,15 @@ class Game:
     def __init__(self, controller):
         self.Controller = controller
 
+    def visualize_game(self, game_controller):
+        game_controller.board.visualize()
+        game_controller.visualize_move(game_controller.possible_moves)
+
     def run(self):
         screen = pg.display.set_mode((WIDTH, HEIGHT))
-        game_controller = GameController(screen)
+        game_controller = GameController(screen, START_COLOR)
         pg.init()
-        pg.display.set_caption('Dáma')
+        pg.display.set_caption('Draughts')
         clock = pg.time.Clock()
         game_controller.board.load_troops(START_BOARD)
         running = True
@@ -98,8 +127,8 @@ class Game:
         # board.make_move((4, 5), board.get_troop_by_idx((0, 1)))
         while running:
             clock.tick(REFRESHRATE)
-            running = self.handleEvents(game_controller.board)
-            game_controller.board.visualize()
+            running = self.handleEvents(game_controller)
+            self.visualize_game(game_controller)
             pg.display.flip()
 
         pg.quit()
@@ -112,9 +141,19 @@ class Game:
             elif event.type == pg.KEYDOWN and event.key == self.Controller.exitKey:
                 running = False
             elif event.type == self.Controller.controlKey:
-                game_controller.select_troop(game_controller.board.get_troop_by_draw_idx(pg.mouse.get_pos()))
-                print("troop->", game_controller.board.get_troop_by_draw_idx(pg.mouse.get_pos()))
-                print(game_controller.board.get_moves(game_controller.board.get_troop_by_draw_idx(pg.mouse.get_pos())))
+                if game_controller.selectPhase:
+                    game_controller.select_troop(game_controller.board.get_troop_by_draw_idx(pg.mouse.get_pos()))
+                else:
+                    pos = game_controller.board.convert_draw_idx(pg.mouse.get_pos())
+                    if pos in game_controller.possible_moves:
+                        game_controller.select_target_pos(pos, game_controller.possible_moves[pos])
+                        game_controller.change_player_on_turn()
+                    else:
+                        game_controller.selectPhase = True
+                        game_controller.possible_moves = {}
+
+                # print("troop->", game_controller.board.get_troop_by_draw_idx(pg.mouse.get_pos()))
+                # print(game_controller.board.get_moves(game_controller.board.get_troop_by_draw_idx(pg.mouse.get_pos())))
 
         return running
 
@@ -131,6 +170,9 @@ class Board:
             for y in range(0, COLS):
                 if (x + y) % 2 == 0:
                     pg.draw.rect(self.screen, WHITE,
+                                 (x * WIDTH // COLS, y * WIDTH // COLS, WIDTH // COLS, WIDTH // COLS))
+                else:
+                    pg.draw.rect(self.screen, BLACK,
                                  (x * WIDTH // COLS, y * WIDTH // COLS, WIDTH // COLS, WIDTH // COLS))
         for row in self.board:
             for item in row:
@@ -159,8 +201,8 @@ class Board:
             print(x)
 
     def make_move(self, targetIdx, troop):
-        if targetIdx == ROWS or 0:
-            self.board[troop.x][troop.y] = King((troop.x, troop.y), troop.color, self.screen)
+        if targetIdx[0] == ROWS - 1 or targetIdx[0] == 0:
+            self.board[troop.x][troop.y] = King((targetIdx[0], targetIdx[1]), troop.color, self.screen)
         self.board[troop.x][troop.y], self.board[targetIdx[0]][targetIdx[1]] = self.board[targetIdx[0]][targetIdx[1]], \
                                                                                self.board[troop.x][troop.y]
         troop.set_coordinates(targetIdx)
@@ -169,10 +211,10 @@ class Board:
         return self.board[idx[0]][idx[1]]
 
     def get_troop_by_draw_idx(self, idx):
-        print(idx[0])
-        print(idx[1])
-        print(idx[0] // (WIDTH // COLS), ",", idx[1] // (WIDTH // COLS))
         return self.board[idx[0] // (WIDTH // COLS)][idx[1] // (WIDTH // COLS)]
+
+    def convert_draw_idx(self, idx):
+        return (idx[0] // (WIDTH // COLS)), (idx[1] // (WIDTH // COLS))
 
     def get_all_troops(self, color):
         pass
