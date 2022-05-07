@@ -2,30 +2,15 @@ from abc import ABC, abstractmethod
 import math
 import random
 import os
+from Constatnts import *
+from AI import AI, HeurisitcBlack, HeurisitcWhite
 
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame as pg
 
+
 # gameIcon = pg.image.load('carIcon.png')
 # pg.display.set_icon(gameIcon)
-
-# constants :
-WIDTH = 800
-HEIGHT = 800
-REFRESHRATE = 60
-SCREEN = pg.display.set_mode((WIDTH, HEIGHT))
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-PIECE_COLOR_WHITE = (227, 188, 79)
-PIECE_COLOR_DARK = (89, 128, 80)
-KING_COLOR = (66, 194, 155)
-MOVE_COLOR = (77, 189, 85)
-START_COLOR = PIECE_COLOR_DARK
-ROWS = 8
-COLS = 8
-#START_BOARD = "1w1w1w1w/w1w1w1w1/1w1w1w1w/8/8/b1b1b1b1/1b1b1b1b/b1b1b1b1"
-#START_BOARD = "1w1w1w1w/w1w1w1w1/8/8/8/8/1b1b1b1b/b1b1b1b1"
-START_BOARD = "5w2/b3w1w1/7w/2w5/7b/4b3/1W5w/4b1b1"
 
 
 class GameController:
@@ -53,21 +38,29 @@ class GameController:
         self.possible_moves = {}
 
     def select_target_pos(self, idx, delete_troops):
-        if delete_troops:
-            if self.selected_troop.color == PIECE_COLOR_WHITE:
-                self.board.blackNum -= len(delete_troops)
-            else:
-                self.board.whiteNum -= len(delete_troops)
-
         self.board.make_move(idx, self.selected_troop)
+        king = 0
         for troop in delete_troops:
+            if isinstance(troop, King):
+                king += 1
             self.board.board[troop.x][troop.y] = '0'
+
+        if self.selected_troop.color == PIECE_COLOR_WHITE:
+            self.board.blackKingNum -= king
+            self.board.blackNum -= (len(delete_troops) - king)
+        else:
+            self.board.whiteKingNum -= king
+            self.board.whiteNum -= (len(delete_troops) - king)
+
         self.possible_moves = {}
         self.selectPhase = True
 
     def get_winner(self):
         if self.board.whiteNum == 0:
-            pass
+            return PIECE_COLOR_DARK
+        if self.board.blackNum == 0:
+            return PIECE_COLOR_WHITE
+        return None
 
     def get_troop_valid_moves(self, troop):
         pass
@@ -82,11 +75,16 @@ class GameController:
         self.board.make_move(idx, self.selected_troop)
 
     def change_player_on_turn(self):
-        print("white:", self.board.whiteNum, "black", self.board.blackNum)
+        print(self.board.get_troops_by_color(PIECE_COLOR_WHITE))
+        print("white:", self.board.whiteNum, "+", self.board.whiteKingNum, " black", self.board.blackNum, "+",
+              self.board.blackKingNum)
+
         if self.player_on_turn == PIECE_COLOR_WHITE:
             self.player_on_turn = PIECE_COLOR_DARK
         else:
             self.player_on_turn = PIECE_COLOR_WHITE
+
+        print(AI(self.board, HeurisitcWhite()).generateMoves())
 
     def visualize_move(self, move_list):
         radius = WIDTH // ROWS // 2 - WIDTH // ROWS // 10
@@ -131,6 +129,10 @@ class Game:
             self.visualize_game(game_controller)
             pg.display.flip()
 
+            if game_controller.get_winner():
+                print(f'winner is {game_controller.get_winner()}!')
+                break
+
         pg.quit()
 
     def handleEvents(self, game_controller):
@@ -164,6 +166,8 @@ class Board:
         self.board = []
         self.whiteNum = 0
         self.blackNum = 0
+        self.whiteKingNum = 0
+        self.blackKingNum = 0
 
     def visualize(self):
         for x in range(0, ROWS):
@@ -192,17 +196,27 @@ class Board:
                         self.blackNum += 1
                         self.board[x_cord][y_cord] = Piece((x_cord, y_cord), PIECE_COLOR_DARK, self.screen)
                     case 'B':
-                        self.blackNum += 1
+                        self.blackKingNum += 1
                         self.board[x_cord][y_cord] = King((x_cord, y_cord), PIECE_COLOR_DARK, self.screen)
                     case 'W':
-                        self.whiteNum += 1
+                        self.whiteKingNum += 1
                         self.board[x_cord][y_cord] = King((x_cord, y_cord), PIECE_COLOR_WHITE, self.screen)
         for x in self.board:
             print(x)
 
+    def addKing(self, color):
+        if color == PIECE_COLOR_WHITE:
+            self.whiteNum -= 1
+            self.whiteKingNum += 1
+        else:
+            self.blackNum -= 1
+            self.blackKingNum += 1
+
     def make_move(self, targetIdx, troop):
         if targetIdx[0] == ROWS - 1 or targetIdx[0] == 0:
             self.board[troop.x][troop.y] = King((targetIdx[0], targetIdx[1]), troop.color, self.screen)
+            self.addKing(troop.color)
+
         self.board[troop.x][troop.y], self.board[targetIdx[0]][targetIdx[1]] = self.board[targetIdx[0]][targetIdx[1]], \
                                                                                self.board[troop.x][troop.y]
         troop.set_coordinates(targetIdx)
@@ -216,8 +230,13 @@ class Board:
     def convert_draw_idx(self, idx):
         return (idx[0] // (WIDTH // COLS)), (idx[1] // (WIDTH // COLS))
 
-    def get_all_troops(self, color):
-        pass
+    def get_troops_by_color(self, color):
+        lst = []
+        for x in range(ROWS):
+            for y in range(COLS):
+                if self.board[x][y] != '0' and self.board[x][y].color == color:
+                    lst.append(self.board[x][y])
+        return lst
 
     def get_moves(self, piece):
         moves = {}
@@ -344,7 +363,11 @@ class King(ATroop):
         pg.draw.circle(self.screen, BLACK, (self.draw_x, self.draw_y), radius // 2)
 
     def __repr__(self):
-        return f'({self.x}, {self.y}) -> {self.color} King'
+        if self.color == PIECE_COLOR_WHITE:
+            return '\'W\''
+        else:
+            return '\'D\''
+        # return f'({self.x}, {self.y}) -> {self.color} King'
 
 
 class Piece(ATroop):
