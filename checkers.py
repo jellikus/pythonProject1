@@ -40,6 +40,7 @@ class GameController:
     def select_target_pos(self, idx, delete_troops):
         self.board.make_move(idx, self.selected_troop)
         king = 0
+        print(delete_troops)
         for troop in delete_troops:
             if isinstance(troop, King):
                 king += 1
@@ -75,16 +76,13 @@ class GameController:
         self.board.make_move(idx, self.selected_troop)
 
     def change_player_on_turn(self):
-        print(self.board.get_troops_by_color(PIECE_COLOR_WHITE))
-        print("white:", self.board.whiteNum, "+", self.board.whiteKingNum, " black", self.board.blackNum, "+",
-              self.board.blackKingNum)
+        # print("white:", self.board.whiteNum, "+", self.board.whiteKingNum, " black", self.board.blackNum, "+",
+        #      self.board.blackKingNum)
 
         if self.player_on_turn == PIECE_COLOR_WHITE:
             self.player_on_turn = PIECE_COLOR_DARK
         else:
             self.player_on_turn = PIECE_COLOR_WHITE
-
-        print(AI(self.board, HeurisitcWhite()).generateMoves())
 
     def visualize_move(self, move_list):
         radius = WIDTH // ROWS // 2 - WIDTH // ROWS // 10
@@ -116,6 +114,7 @@ class Game:
     def run(self):
         screen = pg.display.set_mode((WIDTH, HEIGHT))
         game_controller = GameController(screen, START_COLOR)
+        ai_controller = AI(game_controller.board, HeurisitcWhite())
         pg.init()
         pg.display.set_caption('Draughts')
         clock = pg.time.Clock()
@@ -125,7 +124,7 @@ class Game:
         # board.make_move((4, 5), board.get_troop_by_idx((0, 1)))
         while running:
             clock.tick(REFRESHRATE)
-            running = self.handleEvents(game_controller)
+            running = self.handleEvents(game_controller, ai_controller)
             self.visualize_game(game_controller)
             pg.display.flip()
 
@@ -135,8 +134,15 @@ class Game:
 
         pg.quit()
 
-    def handleEvents(self, game_controller):
+    def handleEvents(self, game_controller, ai_controller=None):
         running = True
+        if ai_controller and ai_controller.color == game_controller.player_on_turn:
+            value, move = ai_controller.search(AI_SEARCH_DEPTH, 0, 0)
+            print("EVAL:", value, move)
+            game_controller.select_troop(move[0])
+            game_controller.select_target_pos(move[1], move[2])
+            game_controller.change_player_on_turn()
+
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 running = False
@@ -181,7 +187,7 @@ class Board:
         for row in self.board:
             for item in row:
                 if item != '0':
-                    item.visualize()
+                    item.visualize(self.screen)
 
     def load_troops(self, boardPositions):
         loadedBoard = parseBoard(boardPositions, ROWS, COLS)
@@ -191,18 +197,16 @@ class Board:
                 match loadedBoard[x_cord][y_cord]:
                     case 'w':
                         self.whiteNum += 1
-                        self.board[x_cord][y_cord] = Piece((x_cord, y_cord), PIECE_COLOR_WHITE, self.screen)
+                        self.board[x_cord][y_cord] = Piece((x_cord, y_cord), PIECE_COLOR_WHITE)
                     case 'b':
                         self.blackNum += 1
-                        self.board[x_cord][y_cord] = Piece((x_cord, y_cord), PIECE_COLOR_DARK, self.screen)
+                        self.board[x_cord][y_cord] = Piece((x_cord, y_cord), PIECE_COLOR_DARK)
                     case 'B':
                         self.blackKingNum += 1
-                        self.board[x_cord][y_cord] = King((x_cord, y_cord), PIECE_COLOR_DARK, self.screen)
+                        self.board[x_cord][y_cord] = King((x_cord, y_cord), PIECE_COLOR_DARK)
                     case 'W':
                         self.whiteKingNum += 1
-                        self.board[x_cord][y_cord] = King((x_cord, y_cord), PIECE_COLOR_WHITE, self.screen)
-        for x in self.board:
-            print(x)
+                        self.board[x_cord][y_cord] = King((x_cord, y_cord), PIECE_COLOR_WHITE)
 
     def addKing(self, color):
         if color == PIECE_COLOR_WHITE:
@@ -212,9 +216,14 @@ class Board:
             self.blackNum -= 1
             self.blackKingNum += 1
 
+    def unmake_move(self, targetIdx, troop):
+        self.board[troop.x][troop.y], self.board[targetIdx[0]][targetIdx[1]] = self.board[targetIdx[0]][targetIdx[1]], \
+                                                                               self.board[troop.x][troop.y]
+        troop.set_coordinates(targetIdx)
+
     def make_move(self, targetIdx, troop):
-        if targetIdx[0] == ROWS - 1 or targetIdx[0] == 0:
-            self.board[troop.x][troop.y] = King((targetIdx[0], targetIdx[1]), troop.color, self.screen)
+        if (targetIdx[0] == ROWS - 1 or targetIdx[0] == 0) and not isinstance(troop, King):
+            self.board[troop.x][troop.y] = King((targetIdx[0], targetIdx[1]), troop.color)
             self.addKing(troop.color)
 
         self.board[troop.x][troop.y], self.board[targetIdx[0]][targetIdx[1]] = self.board[targetIdx[0]][targetIdx[1]], \
@@ -322,8 +331,7 @@ class Board:
 
 
 class ATroop(ABC):
-    def __init__(self, position, teamColor, screen):
-        self.screen = screen
+    def __init__(self, position, teamColor):
         self.x = position[0]
         self.y = position[1]
         self.color = teamColor
@@ -331,7 +339,7 @@ class ATroop(ABC):
         self.set_draw_coordinates()
 
     @abstractmethod
-    def visualize(self):
+    def visualize(self, screen):
         pass
 
     @abstractmethod
@@ -357,31 +365,31 @@ class ATroop(ABC):
 
 
 class King(ATroop):
-    def visualize(self):
+    def visualize(self, screen):
         radius = WIDTH // ROWS // 2 - WIDTH // ROWS // 10
-        pg.draw.circle(self.screen, self.color, (self.draw_x, self.draw_y), radius)
-        pg.draw.circle(self.screen, BLACK, (self.draw_x, self.draw_y), radius // 2)
+        pg.draw.circle(screen, self.color, (self.draw_x, self.draw_y), radius)
+        pg.draw.circle(screen, BLACK, (self.draw_x, self.draw_y), radius // 2)
 
     def __repr__(self):
-        if self.color == PIECE_COLOR_WHITE:
-            return '\'W\''
-        else:
-            return '\'D\''
-        # return f'({self.x}, {self.y}) -> {self.color} King'
+        # if self.color == PIECE_COLOR_WHITE:
+        #     return '\'W\''
+        # else:
+        #     return '\'D\''
+        return f'(K->{self.x},{self.y})'
 
 
 class Piece(ATroop):
 
-    def visualize(self):
+    def visualize(self, screen):
         radius = WIDTH // ROWS // 2 - WIDTH // ROWS // 10
-        pg.draw.circle(self.screen, self.color, (self.draw_x, self.draw_y), radius)
+        pg.draw.circle(screen, self.color, (self.draw_x, self.draw_y), radius)
 
     def __repr__(self):
-        if self.color == PIECE_COLOR_WHITE:
-            return '\'w\''
-        else:
-            return '\'d\''
-        # return f'({self.x}, {self.y}) -> {self.color} Piece'
+        # /  if self.color == PIECE_COLOR_WHITE:
+        #       return '\'w\''
+        #   else:
+        #       return '\'d\''
+        return f'(P->{self.x},{self.y})'
 
 
 def parseBoard(str, rws, col):

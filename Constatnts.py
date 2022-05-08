@@ -1,5 +1,4 @@
 import pygame as pg
-
 WIDTH = 800
 HEIGHT = 800
 REFRESHRATE = 60
@@ -13,6 +12,7 @@ MOVE_COLOR = (77, 189, 85)
 START_COLOR = PIECE_COLOR_DARK
 ROWS = 8
 COLS = 8
+AI_SEARCH_DEPTH = 1
 
 # START_BOARD = "1w1w1w1w/w1w1w1w1/1w1w1w1w/8/8/b1b1b1b1/1b1b1b1b/b1b1b1b1"
 # START_BOARD = "1w1w1w1w/w1w1w1w1/8/8/8/8/1b1b1b1b/b1b1b1b1"
