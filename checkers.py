@@ -1,20 +1,13 @@
-from abc import ABC, abstractmethod
-import math
-import random
 import os
-from Constatnts import *
 from AI import AI, HeurisitcBlack, HeurisitcWhite
-
+from Troop import *
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame as pg
-
+from TurnEngine import Turn
+import math
 
 # gameIcon = pg.image.load('carIcon.png')
 # pg.display.set_icon(gameIcon)
-
-class IndexMismatch(Exception):
-    pass
-
 
 class GameController:
 
@@ -137,17 +130,13 @@ class Game:
 
     def handleEvents(self, game_controller, ai_controller=None):
         running = True
-        # if ai_controller and ai_controller.color == game_controller.player_on_turn:
-        #     value, move = ai_controller.run_minmax(AI_SEARCH_DEPTH, -math.inf, +math.inf)
-        #     print("EVAL:", value, move)
-        #     print("---------------------------------------------------------------------------------------------------")
-        #     game_controller.select_troop(game_controller.board.get_troop_by_idx((move[0].x, move[0].y)))
-        #     game_controller.select_target_pos(move[1],
-        #                                       [game_controller.board.get_troop_by_idx((i.x, i.y)) for i in move[2]])
-        #     print(game_controller.board.blackKingNum, " ", game_controller.board.blackNum, " ",
-        #           game_controller.board.whiteKingNum, " ", game_controller.board.whiteNum)
-        #
-        #     game_controller.change_player_on_turn()
+        if ai_controller and ai_controller.color == game_controller.player_on_turn:
+            value, move = ai_controller.run_minmax(AI_SEARCH_DEPTH, -math.inf, +math.inf)
+            print("EVAL:", value, move)
+            print("---------------------------------------------------------------------------------------------------")
+            move.make_turn()
+            game_controller.turn_history.append(move)
+            game_controller.change_player_on_turn()
 
         for event in pg.event.get():
             if event.type == pg.QUIT:
@@ -176,106 +165,6 @@ class Game:
         return running
 
 
-class Turn:
-    def __init__(self, from_idx, destination, troops_del, board):
-        self.destination_idx = destination
-        self.from_idx = from_idx
-        self.troops_to_be_deleted = troops_del
-        self.board = board
-        self.king_transformation = self._check_king_transformation()
-
-        # if (troop.x, troop.y) != from_idx:
-        #    raise IndexMismatch
-
-    def make_turn(self):
-        f_x, f_y = self.from_idx
-        d_x, d_y = self.destination_idx
-
-        if self.king_transformation:
-            self._transform_to_king(f_x, f_y)
-
-        self._delete_troops(self.troops_to_be_deleted)
-        self.board.board[f_x][f_y], self.board.board[d_x][d_y] = self.board.board[d_x][d_y], self.board.board[f_x][f_y]
-        self.board.board[d_x][d_y].set_coordinates(self.destination_idx)
-
-    def unmake_turn(self):
-        f_x, f_y = self.from_idx
-        d_x, d_y = self.destination_idx
-
-        if self.king_transformation:
-            self._transform_to_piece(d_x, d_y)
-
-        self._add_troops(self.troops_to_be_deleted)
-        self.board.board[d_x][d_y], self.board.board[f_x][f_y] = self.board.board[f_x][f_y], self.board.board[d_x][d_y]
-        self.board.board[f_x][f_y].set_coordinates(self.from_idx)
-
-    def _check_king_transformation(self):
-        f_x, f_y = self.from_idx
-        d_x, d_y = self.destination_idx
-        if (d_x == ROWS - 1 or d_x == 0) and not isinstance(self.board.board[f_x][f_x], King):
-            return True
-        return False
-
-    def _transform_to_king(self, f_x, f_y):
-        color = self.board.board[f_x][f_y].color
-        self.board.board[f_x][f_y] = King((f_x, f_y), color)
-        self._transform_to_king_count(color)
-
-    def _transform_to_piece(self, d_x, d_y):
-        color = self.board.board[d_x][d_y].color
-        self.board.board[d_x][d_y] = Piece((d_x, d_y), color)
-        self._transform_to_piece_count(color)
-
-    def _transform_to_king_count(self, color):
-        if color == PIECE_COLOR_WHITE:
-            self.board.whiteNum -= 1
-            self.board.whiteKingNum += 1
-        else:
-            self.board.blackNum -= 1
-            self.board.blackKingNum += 1
-
-    def _transform_to_piece_count(self, color):
-        if color == PIECE_COLOR_WHITE:
-            self.board.whiteNum += 1
-            self.board.whiteKingNum -= 1
-        else:
-            self.board.blackNum += 1
-            self.board.blackKingNum -= 1
-
-    def _delete_troops(self, troops):
-        for troop in troops:
-            if self.board.board[troop.x][troop.y] == '0':
-                raise IndexMismatch
-
-            self.board.board[troop.x][troop.y] = '0'
-            if isinstance(troop, King):
-                if troop.color == PIECE_COLOR_DARK:
-                    self.board.blackKingNum -= 1
-                else:
-                    self.board.whiteKingNum -= 1
-            else:
-                if troop.color == PIECE_COLOR_DARK:
-                    self.board.blackNum -= 1
-                else:
-                    self.board.whiteNum -= 1
-
-    def _add_troops(self, troops):
-        for troop in troops:
-            if self.board.board[troop.x][troop.y] != '0':
-                raise IndexMismatch
-
-            self.board.board[troop.x][troop.y] = troop
-            if isinstance(troop, King):
-                if troop.color == PIECE_COLOR_DARK:
-                    self.board.blackKingNum += 1
-                else:
-                    self.board.whiteKingNum += 1
-            else:
-                if troop.color == PIECE_COLOR_DARK:
-                    self.board.blackNum += 1
-                else:
-                    self.board.whiteNum += 1
-
 
 class Board:
     def __init__(self, screen):
@@ -303,21 +192,26 @@ class Board:
     def load_troops(self, boardPositions):
         loadedBoard = parseBoard(boardPositions, ROWS, COLS)
         self.board = loadedBoard
+        num = 0
         for x_cord in range(ROWS):
             for y_cord in range(COLS):
                 match loadedBoard[x_cord][y_cord]:
                     case 'w':
                         self.whiteNum += 1
-                        self.board[x_cord][y_cord] = Piece((x_cord, y_cord), PIECE_COLOR_WHITE)
+                        num += 1
+                        self.board[x_cord][y_cord] = Piece((x_cord, y_cord), PIECE_COLOR_WHITE, num)
                     case 'b':
                         self.blackNum += 1
-                        self.board[x_cord][y_cord] = Piece((x_cord, y_cord), PIECE_COLOR_DARK)
+                        num += 1
+                        self.board[x_cord][y_cord] = Piece((x_cord, y_cord), PIECE_COLOR_DARK,num)
                     case 'B':
                         self.blackKingNum += 1
-                        self.board[x_cord][y_cord] = King((x_cord, y_cord), PIECE_COLOR_DARK)
+                        num += 1
+                        self.board[x_cord][y_cord] = King((x_cord, y_cord), PIECE_COLOR_DARK, num)
                     case 'W':
                         self.whiteKingNum += 1
-                        self.board[x_cord][y_cord] = King((x_cord, y_cord), PIECE_COLOR_WHITE)
+                        num += 1
+                        self.board[x_cord][y_cord] = King((x_cord, y_cord), PIECE_COLOR_WHITE, num)
 
     def addKing(self, color):
         if color == PIECE_COLOR_WHITE:
@@ -434,68 +328,6 @@ class Board:
             right += 1
 
         return moves
-
-
-class ATroop(ABC):
-    def __init__(self, position, teamColor):
-        self.x = position[0]
-        self.y = position[1]
-        self.color = teamColor
-        self.draw_x = self.draw_y = 0
-        self.set_draw_coordinates()
-
-    @abstractmethod
-    def visualize(self, screen):
-        pass
-
-    @abstractmethod
-    def __repr__(self):
-        pass
-
-    def get_draw_coordinates(self):
-        return self.x, self.y
-
-    def set_draw_coordinates(self):
-        squareSize = WIDTH // ROWS
-
-        self.draw_y = (squareSize // 2) + squareSize * self.y
-        self.draw_x = (squareSize // 2) + squareSize * self.x
-
-    def get_coordinates(self):
-        return self.x, self.y
-
-    def set_coordinates(self, idx):
-        self.x = idx[0]
-        self.y = idx[-1]
-        self.set_draw_coordinates()
-
-
-class King(ATroop):
-    def visualize(self, screen):
-        radius = WIDTH // ROWS // 2 - WIDTH // ROWS // 10
-        pg.draw.circle(screen, self.color, (self.draw_x, self.draw_y), radius)
-        pg.draw.circle(screen, BLACK, (self.draw_x, self.draw_y), radius // 2)
-
-    def __repr__(self):
-        # if self.color == PIECE_COLOR_WHITE:
-        #     return '\'W\''
-        # else:
-        #     return '\'D\''
-        return f'(K->{self.x},{self.y})'
-
-
-class Piece(ATroop):
-
-    def visualize(self, screen):
-        radius = WIDTH // ROWS // 2 - WIDTH // ROWS // 10
-        pg.draw.circle(screen, self.color, (self.draw_x, self.draw_y), radius)
-
-    def __repr__(self):
-        # /  if self.color == PIECE_COLOR_WHITE:
-        #       return '\'w\''
-        #   else:
-        #       return '\'d\''
-        return f'(P->{self.x},{self.y})'
 
 
 def parseBoard(str, rws, col):

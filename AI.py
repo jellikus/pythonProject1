@@ -1,7 +1,7 @@
 from Constatnts import *
-import pygame as pg
 import math
 import copy
+from TurnEngine import Turn
 
 
 class HeurisitcWhite:
@@ -49,7 +49,7 @@ class AI:
         self.depth_now = 0
 
     def run_minmax(self, depth, alpha, beta):
-        value = copy.deepcopy(self.search_max(depth, alpha, beta))
+        value = self.search_max(depth, alpha, beta)
         computedMove = self.bestMove
         self.bestMove = None
         return value, computedMove
@@ -67,43 +67,30 @@ class AI:
                            self.board.whiteNum + self.board.whiteKingNum) * 50
 
         bestEval = -math.inf
-        for move in self.generateMoves(self.color):
+        for troop, target, to_delete in self.generateMoves(self.color):
 
-            boardCopy = copy.deepcopy(self.board.board)
-            wk = copy.deepcopy(self.board.whiteKingNum)
-            w = copy.deepcopy(self.board.whiteNum)
-            dk = copy.deepcopy(self.board.blackKingNum)
-            d = copy.deepcopy(self.board.blackNum)
-            mv = copy.deepcopy(move)
-
-            self.ai_make_move(move[0], move[1], move[2])
+            turn = Turn((troop.x, troop.y), target, to_delete, self.board)
+            turn.make_turn()
 
             search_val = self.search_min(depth - 1, alpha, beta)
-            print("max_search_val:", search_val, " depth: ", depth, "white: ", self.board.whiteNum, ",",
-                  self.board.whiteKingNum, " balck: ", self.board.blackNum, ",", self.board.blackKingNum, "move: ",
-                  mv)
+            # print("max_search_val:", search_val, " depth: ", depth, "white: ", self.board.whiteNum, ",",
+            #       self.board.whiteKingNum, " balck: ", self.board.blackNum, ",", self.board.blackKingNum, "move: ",
+            #       turn)
 
             if search_val > bestEval:
                 bestEval = search_val
                 if depth == AI_SEARCH_DEPTH:
                     print("BEST eval", bestEval, "move: ",
-                          move)
+                          turn)
 
-                    self.bestMove = mv
+                    self.bestMove = turn
 
-            self.board.board = boardCopy
-            self.board.whiteKingNum = wk
-            self.board.whiteNum = w
-            self.board.blackKingNum = dk
-            self.board.blackNum = d
+            turn.unmake_turn()
 
             if bestEval >= beta:
                 return bestEval
             alpha = max(alpha, bestEval)
 
-            # self.ai_unmake_move(troopCopy, idx, move[2], move[0].x, move[0].y)
-            # print("white: ", self.board.whiteNum, ",", self.board.whiteKingNum, " balck: ",
-            #     self.board.blackNum, ",", self.board.blackKingNum, "to be backuped:", deleteList)
         return bestEval
 
     def search_min(self, depth, alpha, beta):
@@ -112,37 +99,32 @@ class AI:
             return x
 
         if self.board.blackNum == 0 and self.board.blackKingNum == 0 or self.board.whiteNum == 0 and self.board.whiteKingNum == 0:
-            print("max:WINNER")
+            # print("max:WINNER")
             return (self.board.whiteNum + self.board.whiteKingNum) - (
                     self.board.blackKingNum + self.board.blackNum) * 500 + (
                            self.board.whiteNum + self.board.whiteKingNum) * 50
 
         bestEval = math.inf
+        a = self.generateMoves(self.get_opposite_color())
+        for troop, target, to_delete in self.generateMoves(self.get_opposite_color()):
 
-        mvs = self.generateMoves(self.color)
-        for move in self.generateMoves(self.get_opposite_color()):
+            # if self.board.board[troop.x][troop.y] == '0':
+            #     pass
 
-            boardCopy = copy.deepcopy(self.board.board)
-            wk = copy.deepcopy(self.board.whiteKingNum)
-            w = copy.deepcopy(self.board.whiteNum)
-            dk = copy.deepcopy(self.board.blackKingNum)
-            d = copy.deepcopy(self.board.blackNum)
-            mv = copy.deepcopy(move)
-
-            self.ai_make_move(move[0], move[1], move[2])
+            # print("check:", troop, target, to_delete)
+            # print(self.board.board[troop.x][troop.y], self.board.board[target[0]][target[1]])
+            turn = Turn((troop.x, troop.y), target, to_delete, self.board)
+            turn.make_turn()
 
             search_val = self.search_max(depth - 1, alpha, beta)
-            print("min_search_val:", search_val, " depth: ", depth, "white: ", self.board.whiteNum, ",",
-                  self.board.whiteKingNum, " balck: ", self.board.blackNum, ",", self.board.blackKingNum, "move: ",
-                  mv)
+            # print("min_search_val:", search_val, " depth: ", depth, "white: ", self.board.whiteNum, ",",
+            #       self.board.whiteKingNum, " balck: ", self.board.blackNum, ",", self.board.blackKingNum, "move: ",
+            #       turn)
+
             if search_val < bestEval:
                 bestEval = search_val
 
-            self.board.board = boardCopy
-            self.board.whiteKingNum = wk
-            self.board.whiteNum = w
-            self.board.blackKingNum = dk
-            self.board.blackNum = d
+            turn.unmake_turn()
 
             if bestEval <= alpha:
                 self.depth_now -= 1
