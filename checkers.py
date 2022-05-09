@@ -40,7 +40,6 @@ class GameController:
     def select_target_pos(self, idx, delete_troops):
         self.board.make_move(idx, self.selected_troop)
         king = 0
-        print(delete_troops)
         for troop in delete_troops:
             if isinstance(troop, King):
                 king += 1
@@ -57,9 +56,9 @@ class GameController:
         self.selectPhase = True
 
     def get_winner(self):
-        if self.board.whiteNum == 0:
+        if self.board.whiteNum + self.board.whiteKingNum == 0:
             return PIECE_COLOR_DARK
-        if self.board.blackNum == 0:
+        if self.board.blackNum + self.board.blackKingNum== 0:
             return PIECE_COLOR_WHITE
         return None
 
@@ -115,6 +114,8 @@ class Game:
         screen = pg.display.set_mode((WIDTH, HEIGHT))
         game_controller = GameController(screen, START_COLOR)
         ai_controller = AI(game_controller.board, HeurisitcWhite())
+        #ai_controller = None
+
         pg.init()
         pg.display.set_caption('Draughts')
         clock = pg.time.Clock()
@@ -137,10 +138,14 @@ class Game:
     def handleEvents(self, game_controller, ai_controller=None):
         running = True
         if ai_controller and ai_controller.color == game_controller.player_on_turn:
-            value, move = ai_controller.search(AI_SEARCH_DEPTH, 0, 0)
+            value, move = ai_controller.run_minmax(AI_SEARCH_DEPTH, -math.inf, +math.inf)
             print("EVAL:", value, move)
-            game_controller.select_troop(move[0])
-            game_controller.select_target_pos(move[1], move[2])
+            print("---------------------------------------------------------------------------------------------------")
+            game_controller.select_troop(game_controller.board.get_troop_by_idx((move[0].x, move[0].y)))
+            game_controller.select_target_pos(move[1], [game_controller.board.get_troop_by_idx((i.x, i.y)) for i in move[2]])
+            print(game_controller.board.blackKingNum, " ", game_controller.board.blackNum, " ",
+                  game_controller.board.whiteKingNum, " ", game_controller.board.whiteNum)
+
             game_controller.change_player_on_turn()
 
         for event in pg.event.get():
@@ -155,6 +160,7 @@ class Game:
                     pos = game_controller.board.convert_draw_idx(pg.mouse.get_pos())
                     if pos in game_controller.possible_moves:
                         game_controller.select_target_pos(pos, game_controller.possible_moves[pos])
+                        print(game_controller.board.blackKingNum, " ", game_controller.board.blackNum," ", game_controller.board.whiteKingNum," ", game_controller.board.whiteNum)
                         game_controller.change_player_on_turn()
                     else:
                         game_controller.selectPhase = True
