@@ -67,7 +67,6 @@ class AI:
                            self.board.whiteNum + self.board.whiteKingNum) * 50
 
         bestEval = -math.inf
-        mvs = self.generateMoves(self.color)
         for move in self.generateMoves(self.color):
 
             boardCopy = copy.deepcopy(self.board.board)
@@ -154,7 +153,6 @@ class AI:
 
     def generateMoves(self, color):
         moves = []
-        # d = [move for troop in self.board.get_troops_by_color(self.color) for move in self.board.get_moves(troop).items() or []]
         for troop in self.board.get_troops_by_color(color):
             for move in self.board.get_moves(troop).items():
                 if move[1]:
@@ -199,13 +197,4 @@ class AI:
                         self.board.blackNum += 1
                     else:
                         self.board.whiteNum += 1
-
             return
-
-
-def draw_moves(game, board, piece):
-    valid_moves = board.get_valid_moves(piece)
-    board.draw(game.win)
-    pg.draw.circle(game.win, (0, 255, 0), (piece.x, piece.y), 50, 5)
-    game.draw_valid_moves(valid_moves.keys())
-    pg.display.update()

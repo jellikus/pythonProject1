@@ -12,8 +12,12 @@ import pygame as pg
 # gameIcon = pg.image.load('carIcon.png')
 # pg.display.set_icon(gameIcon)
 
+class IndexMismatch(Exception):
+    pass
+
 
 class GameController:
+
     def __init__(self, screen, startColor=PIECE_COLOR_WHITE):
         self.screen = screen
         self.selected_troop = None
@@ -21,6 +25,12 @@ class GameController:
         self.player_on_turn = startColor
         self.possible_moves = {}
         self.selectPhase = True
+        self.turn_history = []
+
+    def get_turn_back(self):
+        if self.turn_history:
+            self.turn_history.pop().unmake_turn()
+            self.change_player_on_turn()
 
     def select_troop(self, troop):
         if troop == '0':
@@ -37,28 +47,17 @@ class GameController:
         self.selectPhase = False
         self.possible_moves = {}
 
-    def select_target_pos(self, idx, delete_troops):
-        self.board.make_move(idx, self.selected_troop)
-        king = 0
-        for troop in delete_troops:
-            if isinstance(troop, King):
-                king += 1
-            self.board.board[troop.x][troop.y] = '0'
-
-        if self.selected_troop.color == PIECE_COLOR_WHITE:
-            self.board.blackKingNum -= king
-            self.board.blackNum -= (len(delete_troops) - king)
-        else:
-            self.board.whiteKingNum -= king
-            self.board.whiteNum -= (len(delete_troops) - king)
-
+    def select_target_pos(self, destination_idx, delete_troops):
+        turn = Turn((self.selected_troop.x, self.selected_troop.y), destination_idx, delete_troops, self.board)
+        self.turn_history.append(turn)
+        turn.make_turn()
         self.possible_moves = {}
         self.selectPhase = True
 
     def get_winner(self):
         if self.board.whiteNum + self.board.whiteKingNum == 0:
             return PIECE_COLOR_DARK
-        if self.board.blackNum + self.board.blackKingNum== 0:
+        if self.board.blackNum + self.board.blackKingNum == 0:
             return PIECE_COLOR_WHITE
         return None
 
@@ -93,9 +92,10 @@ class GameController:
 
 
 class HumanController:
-    def __init__(self, controlKey, exitKey):
+    def __init__(self, controlKey, exitKey, historyKey):
         self.controlKey = controlKey
         self.exitKey = exitKey
+        self.historyKey = historyKey
 
 
 class AIController:
@@ -114,7 +114,7 @@ class Game:
         screen = pg.display.set_mode((WIDTH, HEIGHT))
         game_controller = GameController(screen, START_COLOR)
         ai_controller = AI(game_controller.board, HeurisitcWhite())
-        #ai_controller = None
+        # ai_controller = None
 
         pg.init()
         pg.display.set_caption('Draughts')
@@ -137,22 +137,25 @@ class Game:
 
     def handleEvents(self, game_controller, ai_controller=None):
         running = True
-        if ai_controller and ai_controller.color == game_controller.player_on_turn:
-            value, move = ai_controller.run_minmax(AI_SEARCH_DEPTH, -math.inf, +math.inf)
-            print("EVAL:", value, move)
-            print("---------------------------------------------------------------------------------------------------")
-            game_controller.select_troop(game_controller.board.get_troop_by_idx((move[0].x, move[0].y)))
-            game_controller.select_target_pos(move[1], [game_controller.board.get_troop_by_idx((i.x, i.y)) for i in move[2]])
-            print(game_controller.board.blackKingNum, " ", game_controller.board.blackNum, " ",
-                  game_controller.board.whiteKingNum, " ", game_controller.board.whiteNum)
-
-            game_controller.change_player_on_turn()
+        # if ai_controller and ai_controller.color == game_controller.player_on_turn:
+        #     value, move = ai_controller.run_minmax(AI_SEARCH_DEPTH, -math.inf, +math.inf)
+        #     print("EVAL:", value, move)
+        #     print("---------------------------------------------------------------------------------------------------")
+        #     game_controller.select_troop(game_controller.board.get_troop_by_idx((move[0].x, move[0].y)))
+        #     game_controller.select_target_pos(move[1],
+        #                                       [game_controller.board.get_troop_by_idx((i.x, i.y)) for i in move[2]])
+        #     print(game_controller.board.blackKingNum, " ", game_controller.board.blackNum, " ",
+        #           game_controller.board.whiteKingNum, " ", game_controller.board.whiteNum)
+        #
+        #     game_controller.change_player_on_turn()
 
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 running = False
             elif event.type == pg.KEYDOWN and event.key == self.Controller.exitKey:
                 running = False
+            elif event.type == pg.KEYDOWN and event.key == self.Controller.historyKey:
+                game_controller.get_turn_back()
             elif event.type == self.Controller.controlKey:
                 if game_controller.selectPhase:
                     game_controller.select_troop(game_controller.board.get_troop_by_draw_idx(pg.mouse.get_pos()))
@@ -160,7 +163,8 @@ class Game:
                     pos = game_controller.board.convert_draw_idx(pg.mouse.get_pos())
                     if pos in game_controller.possible_moves:
                         game_controller.select_target_pos(pos, game_controller.possible_moves[pos])
-                        print(game_controller.board.blackKingNum, " ", game_controller.board.blackNum," ", game_controller.board.whiteKingNum," ", game_controller.board.whiteNum)
+                        print(game_controller.board.blackKingNum, " ", game_controller.board.blackNum, " ",
+                              game_controller.board.whiteKingNum, " ", game_controller.board.whiteNum)
                         game_controller.change_player_on_turn()
                     else:
                         game_controller.selectPhase = True
@@ -170,6 +174,107 @@ class Game:
                 # print(game_controller.board.get_moves(game_controller.board.get_troop_by_draw_idx(pg.mouse.get_pos())))
 
         return running
+
+
+class Turn:
+    def __init__(self, from_idx, destination, troops_del, board):
+        self.destination_idx = destination
+        self.from_idx = from_idx
+        self.troops_to_be_deleted = troops_del
+        self.board = board
+        self.king_transformation = self._check_king_transformation()
+
+        # if (troop.x, troop.y) != from_idx:
+        #    raise IndexMismatch
+
+    def make_turn(self):
+        f_x, f_y = self.from_idx
+        d_x, d_y = self.destination_idx
+
+        if self.king_transformation:
+            self._transform_to_king(f_x, f_y)
+
+        self._delete_troops(self.troops_to_be_deleted)
+        self.board.board[f_x][f_y], self.board.board[d_x][d_y] = self.board.board[d_x][d_y], self.board.board[f_x][f_y]
+        self.board.board[d_x][d_y].set_coordinates(self.destination_idx)
+
+    def unmake_turn(self):
+        f_x, f_y = self.from_idx
+        d_x, d_y = self.destination_idx
+
+        if self.king_transformation:
+            self._transform_to_piece(d_x, d_y)
+
+        self._add_troops(self.troops_to_be_deleted)
+        self.board.board[d_x][d_y], self.board.board[f_x][f_y] = self.board.board[f_x][f_y], self.board.board[d_x][d_y]
+        self.board.board[f_x][f_y].set_coordinates(self.from_idx)
+
+    def _check_king_transformation(self):
+        f_x, f_y = self.from_idx
+        d_x, d_y = self.destination_idx
+        if (d_x == ROWS - 1 or d_x == 0) and not isinstance(self.board.board[f_x][f_x], King):
+            return True
+        return False
+
+    def _transform_to_king(self, f_x, f_y):
+        color = self.board.board[f_x][f_y].color
+        self.board.board[f_x][f_y] = King((f_x, f_y), color)
+        self._transform_to_king_count(color)
+
+    def _transform_to_piece(self, d_x, d_y):
+        color = self.board.board[d_x][d_y].color
+        self.board.board[d_x][d_y] = Piece((d_x, d_y), color)
+        self._transform_to_piece_count(color)
+
+    def _transform_to_king_count(self, color):
+        if color == PIECE_COLOR_WHITE:
+            self.board.whiteNum -= 1
+            self.board.whiteKingNum += 1
+        else:
+            self.board.blackNum -= 1
+            self.board.blackKingNum += 1
+
+    def _transform_to_piece_count(self, color):
+        if color == PIECE_COLOR_WHITE:
+            self.board.whiteNum += 1
+            self.board.whiteKingNum -= 1
+        else:
+            self.board.blackNum += 1
+            self.board.blackKingNum -= 1
+
+    def _delete_troops(self, troops):
+        for troop in troops:
+            if self.board.board[troop.x][troop.y] == '0':
+                raise IndexMismatch
+
+            self.board.board[troop.x][troop.y] = '0'
+            if isinstance(troop, King):
+                if troop.color == PIECE_COLOR_DARK:
+                    self.board.blackKingNum -= 1
+                else:
+                    self.board.whiteKingNum -= 1
+            else:
+                if troop.color == PIECE_COLOR_DARK:
+                    self.board.blackNum -= 1
+                else:
+                    self.board.whiteNum -= 1
+
+    def _add_troops(self, troops):
+        for troop in troops:
+            if self.board.board[troop.x][troop.y] != '0':
+                raise IndexMismatch
+
+            self.board.board[troop.x][troop.y] = troop
+            if isinstance(troop, King):
+                if troop.color == PIECE_COLOR_DARK:
+                    self.board.blackKingNum += 1
+                else:
+                    self.board.whiteKingNum += 1
+            else:
+                if troop.color == PIECE_COLOR_DARK:
+                    self.board.blackNum += 1
+                else:
+                    self.board.whiteNum += 1
 
 
 class Board:
@@ -221,11 +326,6 @@ class Board:
         else:
             self.blackNum -= 1
             self.blackKingNum += 1
-
-    def unmake_move(self, targetIdx, troop):
-        self.board[troop.x][troop.y], self.board[targetIdx[0]][targetIdx[1]] = self.board[targetIdx[0]][targetIdx[1]], \
-                                                                               self.board[troop.x][troop.y]
-        troop.set_coordinates(targetIdx)
 
     def make_move(self, targetIdx, troop):
         if (targetIdx[0] == ROWS - 1 or targetIdx[0] == 0) and not isinstance(troop, King):
@@ -420,4 +520,4 @@ def parseBoard(str, rws, col):
     return foo
 
 
-Game(HumanController(pg.MOUSEBUTTONDOWN, pg.K_ESCAPE)).run()
+Game(HumanController(pg.MOUSEBUTTONDOWN, pg.K_ESCAPE, pg.K_h)).run()
