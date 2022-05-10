@@ -106,7 +106,8 @@ class Game:
     def run(self):
         screen = pg.display.set_mode((WIDTH, HEIGHT))
         game_controller = GameController(screen, START_COLOR)
-        ai_controller = AI(game_controller.board, HeurisitcWhite())
+        ai_controller_white = AI(game_controller.board, HeurisitcWhite())
+        ai_scontroller_black = AI(game_controller.board, HeurisitcBlack())
         # ai_controller = None
 
         pg.init()
@@ -118,7 +119,7 @@ class Game:
         # board.make_move((4, 5), board.get_troop_by_idx((0, 1)))
         while running:
             clock.tick(REFRESHRATE)
-            running = self.handleEvents(game_controller, ai_controller)
+            running = self.handleEvents(game_controller, ai_controller_white, ai_scontroller_black)
             self.visualize_game(game_controller)
             pg.display.flip()
 
@@ -128,10 +129,18 @@ class Game:
 
         pg.quit()
 
-    def handleEvents(self, game_controller, ai_controller=None):
+    def handleEvents(self, game_controller, ai_controller_1=None, ai_controller_2=None):
         running = True
-        if ai_controller and ai_controller.color == game_controller.player_on_turn:
-            value, move = ai_controller.run_minmax(AI_SEARCH_DEPTH, -math.inf, +math.inf)
+        if ai_controller_1 and ai_controller_1.color == game_controller.player_on_turn:
+            value, move = ai_controller_1.run_minmax(AI_SEARCH_DEPTH, -math.inf, +math.inf)
+            print("EVAL:", value, move)
+            print("---------------------------------------------------------------------------------------------------")
+            move.make_turn()
+            game_controller.turn_history.append(move)
+            game_controller.change_player_on_turn()
+
+        elif ai_controller_2 and ai_controller_2.color == game_controller.player_on_turn:
+            value, move = ai_controller_2.run_minmax(AI_SEARCH_DEPTH, -math.inf, +math.inf)
             print("EVAL:", value, move)
             print("---------------------------------------------------------------------------------------------------")
             move.make_turn()

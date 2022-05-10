@@ -61,10 +61,14 @@ class AI:
             return x
 
         if self.board.blackNum == 0 and self.board.blackKingNum == 0 or self.board.whiteNum == 0 and self.board.whiteKingNum == 0:
-            print("max:WINNER")
-            return (self.board.whiteNum + self.board.whiteKingNum) - (
-                    self.board.blackKingNum + self.board.blackNum) * 500 + (
-                           self.board.whiteNum + self.board.whiteKingNum) * 50
+            if self.color == PIECE_COLOR_WHITE:
+                return (self.board.whiteNum + self.board.whiteKingNum) - (
+                        self.board.blackKingNum + self.board.blackNum) * 500 + (
+                               self.board.whiteNum + self.board.whiteKingNum) * 50
+            else:
+                return (self.board.blackNum + self.board.blackKingNum) - (
+                        self.board.whiteKingNum + self.board.whiteNum) * 500 + (
+                               self.board.blackNum + self.board.blackKingNum) * 50
 
         bestEval = -math.inf
         for troop, target, to_delete in self.generateMoves(self.color):
@@ -73,9 +77,6 @@ class AI:
             turn.make_turn()
 
             search_val = self.search_min(depth - 1, alpha, beta)
-            # print("max_search_val:", search_val, " depth: ", depth, "white: ", self.board.whiteNum, ",",
-            #       self.board.whiteKingNum, " balck: ", self.board.blackNum, ",", self.board.blackKingNum, "move: ",
-            #       turn)
 
             if search_val > bestEval:
                 bestEval = search_val
@@ -99,13 +100,16 @@ class AI:
             return x
 
         if self.board.blackNum == 0 and self.board.blackKingNum == 0 or self.board.whiteNum == 0 and self.board.whiteKingNum == 0:
-            # print("max:WINNER")
-            return (self.board.whiteNum + self.board.whiteKingNum) - (
-                    self.board.blackKingNum + self.board.blackNum) * 500 + (
-                           self.board.whiteNum + self.board.whiteKingNum) * 50
+            if self.color == PIECE_COLOR_WHITE:
+                return (self.board.whiteNum + self.board.whiteKingNum) - (
+                        self.board.blackKingNum + self.board.blackNum) * 500 + (
+                               self.board.whiteNum + self.board.whiteKingNum) * 50
+            else:
+                return (self.board.blackNum + self.board.blackKingNum) - (
+                        self.board.whiteKingNum + self.board.whiteNum) * 500 + (
+                               self.board.blackNum + self.board.blackKingNum) * 50
 
         bestEval = math.inf
-        a = self.generateMoves(self.get_opposite_color())
         for troop, target, to_delete in self.generateMoves(self.get_opposite_color()):
 
             # if self.board.board[troop.x][troop.y] == '0':
@@ -144,39 +148,3 @@ class AI:
 
         moves.sort(key=lambda emp: len(emp[2]), reverse=True)
         return moves
-
-    def ai_make_move(self, troop_move, idx, deletedList):
-        self.board.make_move(idx, troop_move)
-        if deletedList:
-            for troop in deletedList:
-                self.board.board[troop.x][troop.y] = '0'
-                if troop.__class__.__name__ == 'King':
-                    if troop.color == PIECE_COLOR_DARK:
-                        self.board.blackKingNum -= 1
-                    else:
-                        self.board.whiteKingNum -= 1
-                else:
-                    if troop.color == PIECE_COLOR_DARK:
-                        self.board.blackNum -= 1
-                    else:
-                        self.board.whiteNum -= 1
-            return
-
-    def ai_unmake_move(self, troop_move, idx, deletedList, x, y):
-        self.board.board[idx[0]][idx[1]] = troop_move
-        self.board.board[x][y] = '0'
-        troop_move.set_coordinates(idx)
-        if deletedList:
-            for troop in deletedList:
-                self.board.board[troop.x][troop.y] = troop
-                if troop.__class__.__name__ == 'King':
-                    if troop.color == PIECE_COLOR_DARK:
-                        self.board.blackKingNum += 1
-                    else:
-                        self.board.whiteKingNum += 1
-                else:
-                    if troop.color == PIECE_COLOR_DARK:
-                        self.board.blackNum += 1
-                    else:
-                        self.board.whiteNum += 1
-            return
